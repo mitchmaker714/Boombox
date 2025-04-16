@@ -1,0 +1,20 @@
+export var bands = array(12);  // incoming from Pi
+var rows = 5;
+var cols = 12;
+
+function hsvGradient(row, max) {
+  var hue = 0.33 * (1 - row / max);  // green (top) to red (bottom)
+  return hsv(hue, 1, 1);
+}
+
+export function render2D(index, x, y) {
+  var col = floor(x * cols);  // 0 to 11
+  var row = floor(y * rows);  // 0 to 4
+
+  var threshold = bands[col] * rows;
+  if (row < threshold) {
+    return hsvGradient(row, rows - 1);
+  } else {
+    return [0, 0, 0];
+  }
+}
