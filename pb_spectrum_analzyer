@@ -1,0 +1,24 @@
+var rows = 5;
+var cols = 12;
+
+// Generates a color gradient from red (bottom) to green (top)
+function hsvGradient(row, max) {
+  var hue = 0.33 * (1 - row / max);  // 0.33 = green, 0 = red
+  return hsv(hue, 1, 1);
+}
+
+export function render2D(index, x, y) {
+  var col = floor(x * cols);  // Map x to 0–11
+  var row = floor(y * rows);  // Map y to 0–4
+
+  var band = col; // 1 band per column
+  var amplitude = frequencyData[band] / 255;  // Normalize to 0–1
+
+  var threshold = amplitude * rows;
+
+  if (row < threshold) {
+    return hsvGradient(row, rows - 1);
+  } else {
+    return [0, 0, 0];
+  }
+}
