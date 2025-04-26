@@ -1,0 +1,83 @@
+var width = 12;
+var height = pixelCount / width;
+
+var peakHSV = [0, 1, 1];
+
+export var frequencyData = array(32);
+
+var peaks = array(width);
+var fy = array(width);
+var targetFy = array(width);
+
+var peakDropMs = 0;
+
+var targetMax = 0.9;
+var averageMax = 0.0;
+var pic = makePIController(0.25, 1.8, 30, 0, 200);
+
+var threshold = 0.000337;
+
+function makePIController(kp, ki, start, min, max) {
+  var pic = array(5);
+  pic[0] = kp;
+  pic[1] = ki;
+  pic[2] = start;
+  pic[3] = min;
+  pic[4] = max;
+  return pic;
+}
+
+function calcPIController(pic, err) {
+  pic[2] = clamp(pic[2] + err, pic[3], pic[4]);
+  return pic[0] * err + pic[1] * pic[2];
+}
+
+export function beforeRender(delta) {
+  var sensitivity = max(1, calcPIController(pic, targetMax - averageMax));
+  var hueT = time(1 / 65.536);
+
+  peakDropMs += delta;
+  if (peakDropMs > 100) {
+    peakDropMs = 0;
+    for (var i = 0; i < width; i++) {
+      peaks[i] = max(0, peaks[i] - 1);
+    }
+  }
+
+  var currentMax = 0;
+  for (var i = 0; i < width; i++) {
+    var logy = log(i / width + 1);
+    var level = frequencyData[logy * 32];
+
+    if (level > threshold) {
+      var powerLevel = level * sensitivity;
+      targetFy[i] = floor(min(1, powerLevel) * height);
+    } else {
+      targetFy[i] = 0;
+    }
+
+    fy[i] = (fy[i] * 0.9) + (targetFy[i] * 0.1);
+
+    peaks[i] = max(peaks[i], fy[i]);
+    currentMax = max(currentMax, level);
+  }
+
+  averageMax = averageMax - (averageMax / 50) + (currentMax / 50);
+}
+
+export function render2D(index, x, y) {
+  var xPixel = floor(x * width);
+  var yPixel = height - 1 - floor(y * height);
+
+  var h = time(0.1) + x;
+  var s = 1;
+  var v = fy[xPixel] > yPixel ? 1 : 0;
+
+  if (peaks[xPixel] == yPixel) {
+    h = peakHSV[0];
+    s = peakHSV[1];
+    v = peakHSV[2];
+  }
+
+  return hsv(h, s, v);
+}
