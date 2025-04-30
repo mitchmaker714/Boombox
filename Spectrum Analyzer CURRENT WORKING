@@ -1,21 +1,29 @@
-var width = 12;
+// Set the width of your 2D display (number of columns)
+var width = 32;
 var height = pixelCount / width;
 
+// Peak value indicators [hue, saturation, value]
 var peakHSV = [0, 1, 1];
 
+// Get frequency information from the sensor expansion board
 export var frequencyData = array(32);
 
+// Peak values for each bar
 var peaks = array(width);
+// Smoothed current frequency values for each bar
 var fy = array(width);
+// Target frequency values before smoothing
 var targetFy = array(width);
 
 var peakDropMs = 0;
 
+// Automatic gain / PI controller
 var targetMax = 0.9;
 var averageMax = 0.0;
 var pic = makePIController(0.25, 1.8, 30, 0, 200);
 
-var threshold = 0.000337;
+// Threshold for audio activation
+var threshold = 0.000337;  // Threshold tuned for real sound
 
 function makePIController(kp, ki, start, min, max) {
   var pic = array(5);
@@ -33,10 +41,14 @@ function calcPIController(pic, err) {
 }
 
 export function beforeRender(delta) {
+  // Calculate sensitivity based on the target maximum
   var sensitivity = max(1, calcPIController(pic, targetMax - averageMax));
-  var hueT = time(1 / 65.536);
+
+  var hueT = time(1 / 65.536); // 1-second hue rotation
 
   peakDropMs += delta;
+
+  // Drop all the peaks every 100ms
   if (peakDropMs > 100) {
     peakDropMs = 0;
     for (var i = 0; i < width; i++) {
@@ -49,6 +61,7 @@ export function beforeRender(delta) {
     var logy = log(i / width + 1);
     var level = frequencyData[logy * 32];
 
+    // Apply threshold check
     if (level > threshold) {
       var powerLevel = level * sensitivity;
       targetFy[i] = floor(min(1, powerLevel) * height);
@@ -73,6 +86,7 @@ export function render2D(index, x, y) {
   var s = 1;
   var v = fy[xPixel] > yPixel ? 1 : 0;
 
+  // Apply peak color
   if (peaks[xPixel] == yPixel) {
     h = peakHSV[0];
     s = peakHSV[1];
