@@ -8,86 +8,89 @@ var peakHSV = [0, 1, 1];
 // Get frequency information from the sensor expansion board
 export var frequencyData = array(32);
 
-// Peak values for each bar
-var peaks = array(width);
-// Smoothed current frequency values for each bar
-var fy = array(width);
+// Peak values for each column
+var peaks     = array(width);
+// Smoothed current frequency values for each column
+var fy        = array(width);
 // Target frequency values before smoothing
-var targetFy = array(width);
+var targetFy  = array(width);
 
 var peakDropMs = 0;
 
 // Automatic gain / PI controller
-var targetMax = 0.9;
+var targetMax  = 0.9;
 var averageMax = 0.0;
-var pic = makePIController(0.25, 1.8, 30, 0, 200);
+var pic        = makePIController(0.25, 1.8, 30, 0, 200);
 
-// Threshold for audio activation
-var threshold = 0.000337;  // Threshold tuned for real sound
+// Raised floor to ignore background hiss
+var threshold  = 0.02;  
 
 function makePIController(kp, ki, start, min, max) {
-  var pic = array(5);
-  pic[0] = kp;
-  pic[1] = ki;
-  pic[2] = start;
-  pic[3] = min;
-  pic[4] = max;
-  return pic;
+  var p = array(5);
+  p[0] = kp;
+  p[1] = ki;
+  p[2] = start;
+  p[3] = min;
+  p[4] = max;
+  return p;
 }
 
-function calcPIController(pic, err) {
-  pic[2] = clamp(pic[2] + err, pic[3], pic[4]);
-  return pic[0] * err + pic[1] * pic[2];
+function calcPIController(p, err) {
+  p[2] = clamp(p[2] + err, p[3], p[4]);
+  // clamp output so sensitivity stays reasonable
+  return clamp(p[0] * err + p[1] * p[2], 1, 15);
 }
 
 export function beforeRender(delta) {
   // Calculate sensitivity based on the target maximum
-  var sensitivity = max(1, calcPIController(pic, targetMax - averageMax));
+  var sensitivity = calcPIController(pic, targetMax - averageMax);
 
-  var hueT = time(1 / 65.536); // 1-second hue rotation
+  peakDropMs += delta * 1000;  // convert to milliseconds
 
-  peakDropMs += delta;
-
-  // Drop all the peaks every 100ms
-  if (peakDropMs > 100) {
+  // Drop all the peaks every 200ms
+  if (peakDropMs > 200) {
     peakDropMs = 0;
     for (var i = 0; i < width; i++) {
-      peaks[i] = max(0, peaks[i] - 1);
+      peaks[i] = max(0, peaks[i] - 2);
     }
   }
 
   var currentMax = 0;
   for (var i = 0; i < width; i++) {
-    var logy = log(i / width + 1);
-    var level = frequencyData[logy * 32];
+    // linear mapping of bin→column
+    var lvl = frequencyData[i];
 
     // Apply threshold check
-    if (level > threshold) {
-      var powerLevel = level * sensitivity;
-      targetFy[i] = floor(min(1, powerLevel) * height);
+    if (lvl > threshold) {
+      var powerLevel    = (lvl - threshold) * sensitivity;
+      targetFy[i]       = floor(clamp(powerLevel, 0, 1) * height);
     } else {
       targetFy[i] = 0;
     }
 
-    fy[i] = (fy[i] * 0.9) + (targetFy[i] * 0.1);
+    // slower smoothing: 80% old + 20% new
+    fy[i] = fy[i] * 0.8 + targetFy[i] * 0.2;
 
-    peaks[i] = max(peaks[i], fy[i]);
-    currentMax = max(currentMax, level);
+    // maintain a peak indicator
+    peaks[i]   = max(peaks[i], fy[i]);
+    currentMax = max(currentMax, lvl);
   }
 
-  averageMax = averageMax - (averageMax / 50) + (currentMax / 50);
+  // update running average for PI controller
+  averageMax = averageMax * 0.98 + currentMax * 0.02;
 }
 
 export function render2D(index, x, y) {
-  var xPixel = floor(x * width);
-  var yPixel = height - 1 - floor(y * height);
+  var col    = floor(x * width);
+  var row    = height - 1 - floor(y * height);
 
-  var h = time(0.1) + x;
+  // decide on/off
+  var v = (fy[col] > row) ? 1 : 0;
+  var h = time(0.1) + (col / width);
   var s = 1;
-  var v = fy[xPixel] > yPixel ? 1 : 0;
 
-  // Apply peak color
-  if (peaks[xPixel] == yPixel) {
+  // override with peak color
+  if (peaks[col] === row) {
     h = peakHSV[0];
     s = peakHSV[1];
     v = peakHSV[2];
