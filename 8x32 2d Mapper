@@ -1,0 +1,16 @@
+function(pixelCount) {
+  var width  = 8;
+  var height = pixelCount / width;
+  var map    = [];
+  
+  for (var i = 0; i < pixelCount; i++) {
+    var y = Math.floor(i / width);
+    var x = i % width;
+    if (y % 2 === 1) {
+      x = width - 1 - x;
+    }
+    map.push([x, y]);
+  }
+  
+  return map;
+}
